@@ -1,0 +1,39 @@
+# Python Virtual Environments
+.venv/
+myvenv/
+venv/
+ENV/
+env/
+
+# Python Cache & Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Databases
+*.db
+*.sqlite3
+smart_crop.db
+
+# Logs & Error Files
+*.log
+server.log
+error.log
+server_test.log
+uvicorn_crash.log
+backend_errors.txt
+
+# Environments
+.env
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+
+# Frontend Dependencies (if applicable)
+node_modules/
+
+# IDE & Editor settings
+.vscode/
+.idea/

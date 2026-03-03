@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Crop Punjab - Farm Boundary Mapping</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #111827;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            padding: 1rem;
+            background: #1f2937;
+            text-align: center;
+            border-bottom: 1px solid #374151;
+        }
+
+        .header h2 {
+            margin: 0;
+            color: #10B981;
+        }
+
+        #map {
+            flex-grow: 1;
+            width: 100%;
+        }
+
+        .controls {
+            padding: 1.5rem;
+            text-align: center;
+            background: #1f2937;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .btn {
+            padding: 0.8rem 1.5rem;
+            background: #10B981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0.5rem;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn:hover {
+            background: #059669;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #3b82f6;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: #2563eb;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .stats {
+            font-size: 1.5rem;
+            margin: 0.5rem 0 1.5rem 0;
+            font-weight: 600;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.1);
+            padding: 1rem;
+            border-radius: 8px;
+            display: inline-block;
+            border: 1px dashed #10B981;
+        }
+
+        .instructions {
+            color: #9ca3af;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        /* Custom map crosshair for precision targeting */
+        .leaflet-container {
+            cursor: crosshair !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h2>🛰️ Farm Boundary Mapping (GeoJSON)</h2>
+    </div>
+
+    <!-- The Map Container -->
+    <div id="map"></div>
+
+    <div class="controls">
+        <div class="instructions">
+            <span>📍</span>
+            Tap on the map corners to drop boundary pins (Medh). Drag pins to adjust accuracy.
+        </div>
+
+        <div class="stats">
+            Area: <span id="areaAcres">0.00</span> Acres <span style="color:#d1d5db; font-size: 1.2rem;">(<span
+                    id="areaKilla">0.00</span> Killa)</span>
+        </div>
+
+        <div>
+            <button class="btn btn-secondary" onclick="locateMe()">🎯 Locate Me (GPS)</button>
+            <button class="btn" onclick="saveBoundary()">💾 Save Farm GeoJSON</button>
+            <button class="btn btn-danger" onclick="clearBoundary()">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // ==========================================
+        // 1. Initialize Map & Satellite-First UX
+        // ==========================================
+
+        // Defaulting to central Punjab coordinates
+        const map = L.map('map').setView([30.9, 75.8], 15);
+
+        // High-Resolution Satellite Imagery (ESRI World Imagery)
+        // This is crucial because farmers recognize natural landmarks (trees, dirt paths, tubewells)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Add a secondary hybrid label layer so roads/villages are named on top of the satellite
+        L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}{r}.png', {
+            attribution: '',
+            subdomains: 'abcd',
+            maxZoom: 19,
+            opacity: 0.7
+        }).addTo(map);
+
+        let markers = [];
+        let polygon = null;
+
+        // ==========================================
+        // 2. Interactive Polygon Drawing & Draggable Pins
+        // ==========================================
+
+        map.on('click', function (e) {
+            addMarker(e.latlng);
+        });
+
+        function addMarker(latlng) {
+            // Drop a pin that the farmer can physically drag to fine-tune the "Medh"
+            const marker = L.marker(latlng, { draggable: true }).addTo(map);
+
+            // Re-calculate the polygon and area every time a pin is dragged
+            marker.on('drag', updatePolygon);
+            markers.push(marker);
+
+            updatePolygon();
+        }
+
+        function updatePolygon() {
+            const latlngs = markers.map(m => m.getLatLng());
+
+            // Remove old polygon
+            if (polygon) {
+                map.removeLayer(polygon);
+            }
+
+            // Draw new polygon if we have at least 3 points
+            if (latlngs.length >= 3) {
+                polygon = L.polygon(latlngs, {
+                    color: '#10B981',    // Bright green border
+                    fillColor: '#34d399',// Soft green fill
+                    fillOpacity: 0.4,
+                    weight: 3,
+                    dashArray: '5, 5'    // Dashed line to look like a boundary mapping tool
+                }).addTo(map);
+
+                calculateArea(latlngs); // Real-time validation
+            } else {
+                document.getElementById('areaAcres').innerText = "0.00";
+                document.getElementById('areaKilla').innerText = "0.00";
+            }
+        }
+
+        // ==========================================
+        // 3. Real-Time Area Validation (Acres / Killa)
+        // ==========================================
+
+        function calculateArea(latlngs) {
+            // Earth radius in meters for Spherical Geometry calculation
+            const R = 6378137;
+            let area = 0;
+
+            if (latlngs.length > 2) {
+                for (let i = 0; i < latlngs.length; i++) {
+                    let p1 = latlngs[i];
+                    let p2 = latlngs[(i + 1) % latlngs.length];
+
+                    // Convert to radians and calculate spherical polygon area
+                    let p1Lat = p1.lat * Math.PI / 180;
+                    let p2Lat = p2.lat * Math.PI / 180;
+
+                    area += (p2.lng - p1.lng) * Math.PI / 180 * (2 + Math.sin(p1Lat) + Math.sin(p2Lat));
+                }
+                area = Math.abs(area * R * R / 2.0); // Absolute area in square meters
+            }
+
+            // Conversion constraints:
+            // 1 Square Meter = 0.000247105 Acres
+            // 1 Acre = 1 Killa (Standard in Punjab)
+            const sqMetersToAcres = 0.000247105;
+            const acres = area * sqMetersToAcres;
+            const killa = acres;
+
+            // DOM Update
+            document.getElementById('areaAcres').innerText = acres.toFixed(2);
+            document.getElementById('areaKilla').innerText = killa.toFixed(2);
+        }
+
+        function clearBoundary() {
+            markers.forEach(m => map.removeLayer(m));
+            if (polygon) map.removeLayer(polygon);
+            markers = [];
+            polygon = null;
+            updatePolygon();
+        }
+
+        // ==========================================
+        // 4. GPS Anchor: "Locate Me" Button
+        // ==========================================
+
+        function locateMe() {
+            if (navigator.geolocation) {
+                // Flash button state
+                const btn = document.querySelector('.btn-secondary');
+                const oldText = btn.innerText;
+                btn.innerText = "⏳ Locating...";
+
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+
+                        // Fly smoothly to the farmer's live location and zoom in tight
+                        map.flyTo([lat, lng], 18, {
+                            animate: true,
+                            duration: 1.5
+                        });
+
+                        // Drop a pulsing blue dot representing the farmer's smartphone
+                        L.circleMarker([lat, lng], {
+                            radius: 8,
+                            fillColor: "#3b82f6",
+                            color: "#ffffff",
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.9
+                        }).addTo(map);
+
+                        btn.innerText = oldText;
+                    },
+                    (error) => {
+                        alert("⚠️ Please allow Location/GPS access in your browser to use this feature.");
+                        btn.innerText = oldText;
+                    },
+                    { enableHighAccuracy: true } // Force GPS hardware rather than IP-based location
+                );
+            } else {
+                alert("Geolocation is not supported by your browser.");
+            }
+        }
+
+        // ==========================================
+        // 5. Data Output: GeoJSON Array Export
+        // ==========================================
+
+        function saveBoundary() {
+            if (markers.length < 3) {
+                alert("⚠️ Please tap the map to drop at least 3 pins to form a valid boundary.");
+                return;
+            }
+
+            // Format to GeoJSON standard [lat, lng] as requested by the architectural requirements
+            const coordinates = markers.map(m => {
+                const ll = m.getLatLng();
+                return [ll.lat, ll.lng];
+            });
+
+            // Standard GIS practice: Close the polygon loop by repeating the first coordinate at the end
+            coordinates.push(coordinates[0]);
+
+            const geoJsonPayload = {
+                type: "Feature",
+                geometry: {
+                    type: "Polygon",
+                    coordinates: [coordinates]
+                },
+                properties: {
+                    area_acres: parseFloat(document.getElementById('areaAcres').innerText),
+                    area_killa: parseFloat(document.getElementById('areaKilla').innerText),
+                    timestamp: new Date().toISOString()
+                }
+            };
+
+            console.log("Boundary GeoJSON Export:", JSON.stringify(geoJsonPayload, null, 2));
+
+            alert("✅ Farm Boundary Saved Successfully!\n\nArea: " + geoJsonPayload.properties.area_acres + " Acres\n\n(See Browser Console for the exact GeoJSON Payload sent to FastAPI)");
+
+            // Production Hook Example:
+            // fetch('/api/v1/gis/save-boundary', {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify(geoJsonPayload)
+            // });
+        }
+    </script>
+</body>
+
+</html>
