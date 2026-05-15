@@ -60,3 +60,5 @@ dist/
 # Miscellaneous unimportant data
 *.pdf
 *.csv
+*report*.md
+*Report*.md
