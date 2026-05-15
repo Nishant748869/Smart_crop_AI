@@ -27,6 +27,7 @@ class VerifyOTPRequest(BaseModel):
     sowing_date: Optional[str] = None
     last_irrigation_date: Optional[str] = None
     initial_irrigation_mm: Optional[float] = None
+    boundary_geojson: Optional[str] = None
 
 class AddFieldRequest(BaseModel):
     field_name: str
@@ -36,6 +37,7 @@ class AddFieldRequest(BaseModel):
     sowing_date: Optional[str] = None
     last_irrigation_date: Optional[str] = None
     initial_irrigation_mm: Optional[float] = None
+    boundary_geojson: Optional[str] = None
 
 class DailySoilLogRequest(BaseModel):
     field_id: int
@@ -99,7 +101,9 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
     # 2. Check if farmer exists
     farmer = db.query(Farmer).filter(Farmer.phone_number == payload.phone_number).first()
     
+    is_new_farmer = False
     if not farmer:
+        is_new_farmer = True
         logger.info(f"Registering new farmer: {payload.phone_number}")
         farmer = Farmer(phone_number=payload.phone_number)
         db.add(farmer)
@@ -123,7 +127,8 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
                 lat=payload.lat,
                 lon=payload.lon,
                 crop=payload.crop or 'wheat',
-                sowing_date=payload.sowing_date
+                sowing_date=payload.sowing_date,
+                boundary_geojson=payload.boundary_geojson
             )
             db.add(field)
             db.commit()
@@ -162,10 +167,9 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
             DailySoilStatus.field_id == f.id,
             DailySoilStatus.irrigation_mm > 0
         ).all()
-        
-        from app.services.soil_service import get_soil_properties
+
         soil_profile = get_soil_properties(f.lat, f.lon)
-        
+
         fields_data.append({
             "id": f.id,
             "name": f.field_name,
@@ -182,7 +186,7 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
     return {
         "message": "Login successful",
         "farmer_id": farmer.id,
-        "is_new": farmer.created_at == farmer.created_at,
+        "is_new": is_new_farmer,
         "fields": fields_data
     }
 
@@ -201,7 +205,8 @@ def add_farmer_field(farmer_id: int, payload: AddFieldRequest, db: Session = Dep
         lat=payload.lat,
         lon=payload.lon,
         crop=payload.crop,
-        sowing_date=payload.sowing_date
+        sowing_date=payload.sowing_date,
+        boundary_geojson=payload.boundary_geojson
     )
     db.add(field)
     db.commit()
@@ -276,6 +281,7 @@ def get_farmer_fields(farmer_id: int, db: Session = Depends(get_db)):
             "sowing_date": f.sowing_date,
             "lat": f.lat,
             "lon": f.lon,
+            "boundary_geojson": f.boundary_geojson,
             "soil_type": soil_profile.texture_class,
             "total_irrigations": len(irrigation_events),
             "last_irrigation_date": max([e.date for e in irrigation_events]) if irrigation_events else "None Recorded",

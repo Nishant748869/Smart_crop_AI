@@ -1,4 +1,4 @@
-from app.models.irrigation_models import IrrigationDecision
+from backend.app.models.irrigation_models import IrrigationDecision
 
 class WaterBalanceService:
     """
@@ -35,7 +35,8 @@ class WaterBalanceService:
         # Decision threshold check (e.g., typically irrigate at 50% MAD)
         required = bool(depletion_pct >= depletion_threshold_pct)
         
-        reason = "Soil moisture remains sufficient."
+        moisture_pct = round(100.0 - depletion_pct, 1)
+        reason = f"Soil moisture is at {moisture_pct}%. Sufficient for now."
         urgency_level = "Low"
         
         if required:

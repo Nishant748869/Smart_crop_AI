@@ -11,13 +11,8 @@ class WeatherService:
     GEO_URL = "https://api.bigdatacloud.net/data/reverse-geocode-client"
 
     def __init__(self):
-        # Create a session to manage persistent connections and force retry on bad SSL reads
-        self.session = requests.Session()
-        retries = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retries, pool_connections=1, pool_maxsize=1)
-        self.session.mount('https://', adapter)
-        self.session.mount('http://', adapter)
-        self.timeout = (3.0, 5.0)  # Very strict 5s read timeout
+        self.timeout = 10.0  # 10s timeout
+
 
     def get_forecast(self, latitude: float, longitude: float):
         params = {
@@ -28,7 +23,7 @@ class WeatherService:
         }
 
         try:
-            response = self.session.get(self.BASE_URL, params=params, timeout=self.timeout)
+            response = requests.get(self.BASE_URL, params=params, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
             

@@ -38,10 +38,10 @@ def get_heat_stress_risk(forecast_data):
     }
 
 
-from app.services.et_service import calculate_et0, calculate_etc
-from app.services.soil_service import get_soil_properties
-from app.services.water_balance_service import WaterBalanceService
-from app.models.irrigation_models import IrrigationDecision
+from backend.app.services.et_service import calculate_et0, calculate_etc
+from backend.app.services.soil_service import get_soil_properties
+from backend.app.services.water_balance_service import WaterBalanceService
+from backend.app.models.irrigation_models import IrrigationDecision
 
 def get_irrigation_recommendation(
     forecast_data: dict,
@@ -77,7 +77,7 @@ def get_irrigation_recommendation(
     
     # Simulate past depletion based on single-shot data
     # (In a stateful DB design, this would be fetched from yesterday's row)
-    cumulative_loss = etc_mm * max(0, days_since_last_irri - 1)
+    cumulative_loss = etc_mm * max(0, days_since_last_irri)
     prev_soil_water = max(0.0, taw_mm - cumulative_loss)
     
     # 4. Water Balance Engine calculation

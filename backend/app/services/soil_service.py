@@ -1,7 +1,7 @@
 import logging
-from app.infrastructure.soilgrids_client import SoilGridsClient, SoilGridsClientError
-from app.models.soil_models import SoilProfile
-from app.utils.cache import cache
+from backend.app.infrastructure.soilgrids_client import SoilGridsClient, SoilGridsClientError
+from backend.app.models.soil_models import SoilProfile
+from backend.app.utils.cache import cache
 
 logger = logging.getLogger(__name__)
 client = SoilGridsClient()

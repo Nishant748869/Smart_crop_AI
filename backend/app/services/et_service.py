@@ -1,6 +1,6 @@
-from app.utils.penman_monteith import calculate_eto
-from app.services.crop_service import CropService
-from app.models.weather_models import WeatherData
+from backend.app.utils.penman_monteith import calculate_eto
+from backend.app.services.crop_service import CropService
+from backend.app.models.weather_models import WeatherData
 
 def calculate_et0(weather_data: dict, elevation: float = 250.0) -> float:
     """

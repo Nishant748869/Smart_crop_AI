@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
 from datetime import datetime
-from app.infrastructure.database import Base
+from backend.app.infrastructure.database import Base
 
 class Farmer(Base):
     __tablename__ = "farmers"
@@ -19,6 +19,7 @@ class FarmField(Base):
     lon = Column(Float, nullable=False)
     crop = Column(String(50), nullable=False)
     sowing_date = Column(String(20), nullable=True)
+    boundary_geojson = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class DailySoilStatus(Base):

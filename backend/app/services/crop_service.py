@@ -1,4 +1,4 @@
-from app.models.crop_coefficients import CROP_DATA
+from backend.app.models.crop_coefficients import CROP_DATA
 
 class CropService:
     """

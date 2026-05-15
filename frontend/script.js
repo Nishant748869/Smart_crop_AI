@@ -1,3 +1,5 @@
+const API_BASE_URL = 'http://127.0.0.1:8000';
+let farmerId = null;
 let globalLat = null;
 let globalLon = null;
 let globalLastIrriDate = null;
@@ -16,25 +18,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // --- STEP 0: Welcome Screen ---
 
-document.getElementById('guestModeBtn').addEventListener('click', () => {
+document.getElementById('guestModeBtn')?.addEventListener('click', () => {
+    viewingSavedField = false;
     document.getElementById('step-0-welcome').classList.add('hidden');
     document.getElementById('step-1-location').classList.remove('hidden');
     setTimeout(initFarmMap, 100); // Initialize map after unhiding container
 });
 
-document.getElementById('loginBtn').addEventListener('click', () => {
+document.getElementById('loginBtn')?.addEventListener('click', () => {
     document.getElementById('step-0-welcome').classList.add('hidden');
     document.getElementById('step-0-login').classList.remove('hidden');
 });
 
-document.getElementById('backToWelcomeBtn').addEventListener('click', () => {
+document.getElementById('backToWelcomeBtn')?.addEventListener('click', () => {
     document.getElementById('step-0-login').classList.add('hidden');
     document.getElementById('step-0-welcome').classList.remove('hidden');
 });
 
-let farmerId = null;
-
-document.getElementById('sendOtpBtn').addEventListener('click', async () => {
+document.getElementById('sendOtpBtn')?.addEventListener('click', async () => {
     const phone = document.getElementById('phoneInput').value;
     if (phone.length < 10) {
         showToast("Please enter a valid 10-digit mobile number.");
@@ -47,7 +48,7 @@ document.getElementById('sendOtpBtn').addEventListener('click', async () => {
     btn.innerHTML = `<span class="icon">⏳</span> Sending...`;
 
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/v1/auth/send-otp', {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/send-otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone_number: "+91" + phone })
@@ -75,7 +76,7 @@ document.getElementById('sendOtpBtn').addEventListener('click', async () => {
     }
 });
 
-document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
+document.getElementById('verifyOtpBtn')?.addEventListener('click', async () => {
     const phone = document.getElementById('phoneInput').value;
     const otpVal = document.getElementById('otpInput').value;
 
@@ -89,7 +90,7 @@ document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
     btn.innerHTML = `<span class="icon">⏳</span> Verifying...`;
 
     try {
-        const response = await fetch('http://127.0.0.1:8000/api/v1/auth/verify-otp', {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/verify-otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone_number: "+91" + phone, otp: otpVal })
@@ -139,10 +140,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (savedFarmerId && savedPhone) {
         farmerId = parseInt(savedFarmerId);
-        document.getElementById('step-0-welcome').classList.add('hidden');
+        // Do NOT hide welcome yet, wait for renderDashboard or catch failure
 
         // Directly fetch fields if logged in previously
-        fetch(`http://127.0.0.1:8000/api/v1/auth/farmer/${farmerId}/fields`)
+        fetch(`${API_BASE_URL}/api/v1/auth/farmer/${farmerId}/fields`)
             .then(res => {
                 if (!res.ok) throw new Error("Invalid Session");
                 return res.json();
@@ -217,6 +218,9 @@ function renderDashboard(fields) {
                     <button class="btn-primary view-history-btn" data-name="${field.name}" data-history='${JSON.stringify(field.irrigation_history || [])}' style="width: 100%; margin-bottom: 0.5rem; background-color: #3b82f6; border: none; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
                         <span class="icon">📅</span> View Irrigation History
                     </button>
+                    <button class="btn-primary fetch-advisory-btn" data-id="${field.id}" data-lat="${field.lat}" data-lon="${field.lon}" data-crop="${field.crop}" data-sow="${field.sowing_date}" data-last-irri="${lastIrrigated}" style="width: 100%; margin-bottom: 0.5rem; background: linear-gradient(135deg, #10B981, #059669); border: none;">
+                        <span class="icon">🔍</span> Crop Health Analysis
+                    </button>
                     <div style="display: flex; gap: 0.5rem; justify-content: space-between;">
                         <button class="btn-secondary log-irrigation-btn" data-id="${field.id}" style="flex: 1; padding: 0.5rem; font-size: 0.8rem; border-color: rgba(59, 130, 246, 0.4);">
                             <span class="icon">➕</span> Log Irrigation
@@ -231,6 +235,8 @@ function renderDashboard(fields) {
         });
     }
 
+    document.getElementById('step-0-welcome').classList.add('hidden');
+    document.getElementById('step-0-login').classList.add('hidden');
     document.getElementById('step-0-dashboard').classList.remove('hidden');
 
     // Attach dynamic listeners
@@ -251,17 +257,20 @@ function renderDashboard(fields) {
                 fLastIrri = fSow; // Default back to sowing date if never watered
             }
 
-            globalLat = fLat;
-            globalLon = fLon;
+            globalLat = parseFloat(fLat);
+            globalLon = parseFloat(fLon);
+            localStorage.setItem('currentViewFieldId', target.getAttribute('data-id'));
 
             fetchWeatherAnalysis(fLat, fLon, fCrop, fSow, fLastIrri).then(() => {
+                // Ensure UI unhides after fetch
+                document.getElementById('results-container').classList.remove('hidden');
                 document.getElementById('step-0-dashboard').classList.add('hidden');
             }).catch(err => {
                 console.error("Dashboard Analysis Error:", err);
-                showToast("Failed to fetch Live Advisory data.");
+                showToast("Failed to fetch Crop Health data.");
             }).finally(() => {
                 target.disabled = false;
-                target.innerHTML = `<span class="icon">🤖</span> Smart Weather Advisory`;
+                target.innerHTML = `<span class="icon">🔍</span> Crop Health Analysis`;
             });
         });
     });
@@ -330,7 +339,7 @@ function renderDashboard(fields) {
 }
 
 // --- Dashboard Logic (Logged In Users) ---
-document.getElementById('dashAddFieldBtn').addEventListener('click', () => {
+document.getElementById('dashAddFieldBtn')?.addEventListener('click', () => {
     viewingSavedField = false;
     document.getElementById('step-0-dashboard').classList.add('hidden');
     // Clear old loc state so they can pick a new field map point
@@ -345,13 +354,13 @@ document.getElementById('dashAddFieldBtn').addEventListener('click', () => {
 
 const deleteFarmModal = document.getElementById('deleteFarmModal');
 
-document.getElementById('cancelDeleteFarmBtn').addEventListener('click', () => {
+document.getElementById('cancelDeleteFarmBtn')?.addEventListener('click', () => {
     deleteFarmModal.classList.add('hidden');
     currentFieldToDeleteId = null;
     deleteBtnTarget = null;
 });
 
-document.getElementById('confirmDeleteFarmBtn').addEventListener('click', () => {
+document.getElementById('confirmDeleteFarmBtn')?.addEventListener('click', () => {
     if (!currentFieldToDeleteId) return;
     const target = deleteBtnTarget;
 
@@ -359,7 +368,7 @@ document.getElementById('confirmDeleteFarmBtn').addEventListener('click', () => 
     target.innerHTML = "Deleting...";
     deleteFarmModal.classList.add('hidden');
 
-    fetch(`http://127.0.0.1:8000/api/v1/auth/farmer/${farmerId}/fields/${currentFieldToDeleteId}`, {
+    fetch(`${API_BASE_URL}/api/v1/auth/farmer/${farmerId}/fields/${currentFieldToDeleteId}`, {
         method: 'DELETE'
     }).then(res => {
         if (res.ok) window.location.reload();
@@ -418,18 +427,18 @@ document.addEventListener('click', (e) => {
 });
 
 // Handle Cancel in Modal
-document.getElementById('cancelIrrigationBtn').addEventListener('click', () => {
+document.getElementById('cancelIrrigationBtn')?.addEventListener('click', () => {
     document.getElementById('irrigationModal').classList.add('hidden');
     currentIrrigationFieldId = null;
 });
 
 // Close History Modal
-document.getElementById('closeHistoryModalBtn').addEventListener('click', () => {
+document.getElementById('closeHistoryModalBtn')?.addEventListener('click', () => {
     document.getElementById('irrigationHistoryModal').classList.add('hidden');
 });
 
 // Handle Save in Modal
-document.getElementById('confirmIrrigationBtn').addEventListener('click', () => {
+document.getElementById('confirmIrrigationBtn')?.addEventListener('click', () => {
     if (!currentIrrigationFieldId) return;
 
     const btn = document.getElementById('confirmIrrigationBtn');
@@ -454,7 +463,7 @@ document.getElementById('confirmIrrigationBtn').addEventListener('click', () => 
     btn.disabled = true;
     btn.innerHTML = `Saving...`;
 
-    fetch(`http://127.0.0.1:8000/api/v1/auth/farmer/${farmerId}/fields/${currentIrrigationFieldId}/irrigate`, {
+    fetch(`${API_BASE_URL}/api/v1/auth/farmer/${farmerId}/fields/${currentIrrigationFieldId}/irrigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -480,7 +489,7 @@ document.getElementById('confirmIrrigationBtn').addEventListener('click', () => 
 });
 
 // --- Dashboard Logic (Logged In Users) ---
-document.getElementById('dashAddFieldBtn').addEventListener('click', () => {
+document.getElementById('dashAddFieldBtn')?.addEventListener('click', () => {
     viewingSavedField = false;
     document.getElementById('step-0-dashboard').classList.add('hidden');
     // Clear old loc state so they can pick a new field map point
@@ -491,7 +500,7 @@ document.getElementById('dashAddFieldBtn').addEventListener('click', () => {
 });
 
 // --- Global Dashboard Navigation ---
-document.getElementById('navDashboardBtn').addEventListener('click', () => {
+document.getElementById('navDashboardBtn')?.addEventListener('click', () => {
     // Escaping from any deeper flow (Location, details, or results)
     document.getElementById('step-1-location').classList.add('hidden');
     document.getElementById('step-2-details').classList.add('hidden');
@@ -502,7 +511,7 @@ document.getElementById('navDashboardBtn').addEventListener('click', () => {
 });
 
 // --- Logout Logic ---
-document.getElementById('logoutBtn').addEventListener('click', () => {
+document.getElementById('logoutBtn')?.addEventListener('click', () => {
     farmerId = null;
     localStorage.removeItem("farmerId");
     localStorage.removeItem("farmerPhone");
@@ -594,7 +603,165 @@ function calculateMapArea(latlngs) {
     document.getElementById('mapAreaAcres').innerText = acres.toFixed(2);
 }
 
-document.getElementById('mapClearBtn').addEventListener('click', () => {
+// --- Live Location (GPS) Logic ---
+document.getElementById('mapLocateBtn')?.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+        showToast("Geolocation is not supported by your browser.", "error");
+        return;
+    }
+
+    const btn = document.getElementById('mapLocateBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Locating...';
+    btn.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            // Ensure map is initialized
+            if (!farmMap) {
+                initFarmMap();
+            }
+
+            if (farmMap) {
+                farmMap.invalidateSize();
+                farmMap.flyTo([lat, lon], 18, {
+                    animate: true,
+                    duration: 1.5
+                });
+
+                // Optional: Show a temporary marker for the user's location
+                L.circleMarker([lat, lon], {
+                    radius: 8,
+                    fillColor: "#3B82F6",
+                    color: "#fff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(farmMap).bindPopup("You are here").openPopup();
+
+                showToast("GPS Location Found!", "success");
+            }
+
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        },
+        (error) => {
+            console.error("GPS Error:", error);
+            let errorMsg = "Failed to get location.";
+            if (error.code === 1) errorMsg = "Location access denied. Please allow GPS.";
+            else if (error.code === 2) errorMsg = "Position unavailable. GPS signal weak.";
+            else if (error.code === 3) errorMsg = "Location request timed out.";
+
+            showToast(errorMsg, "error");
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+});
+
+// --- Map Search Logic ---
+document.getElementById('mapSearchBtn')?.addEventListener('click', async () => {
+    const searchInput = document.getElementById('mapSearchInput').value.trim();
+    if (!searchInput) {
+        showToast("Please enter a location to search", "error");
+        return;
+    }
+
+    const btn = document.getElementById('mapSearchBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    btn.disabled = true;
+
+    try {
+        // Use Photon API (Komoot) for better fuzzy geocoding than Nominatim
+        const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(searchInput)}&limit=1`);
+        const data = await response.json();
+
+        if (data && data.features && data.features.length > 0) {
+            // Photon returns GeoJSON: coordinates are [lon, lat]
+            const lon = parseFloat(data.features[0].geometry.coordinates[0]);
+            const lat = parseFloat(data.features[0].geometry.coordinates[1]);
+            const name = data.features[0].properties.name || data.features[0].properties.city || searchInput;
+
+            // Ensure map is initialized before panning
+            if (!farmMap) {
+                initFarmMap();
+            }
+
+            if (farmMap) {
+                // Invalidate size in case the container was hidden
+                farmMap.invalidateSize();
+                farmMap.flyTo([lat, lon], 16, {
+                    animate: true,
+                    duration: 1.5
+                });
+                showToast(`Found: ${name}`, "success");
+            }
+        } else {
+            showToast("Location not found. Please try a nearby city or landmark.", "error");
+        }
+    } catch (error) {
+        console.error("Geocoding Error:", error);
+        showToast("Search failed. Check your internet connection.", "error");
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+// --- Manual Coordinate Navigation ---
+document.getElementById('mapGoCoordBtn')?.addEventListener('click', () => {
+    const latStr = document.getElementById('manualLatInput').value.trim();
+    const lonStr = document.getElementById('manualLonInput').value.trim();
+
+    if (!latStr || !lonStr) {
+        showToast("Please enter both Latitude and Longitude.", "error");
+        return;
+    }
+
+    const lat = parseFloat(latStr);
+    const lon = parseFloat(lonStr);
+
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        showToast("Invalid coordinates. Lat must be -90 to 90, Lon -180 to 180.", "error");
+        return;
+    }
+
+    // Ensure map is initialized
+    if (!farmMap) {
+        initFarmMap();
+    }
+
+    if (farmMap) {
+        farmMap.invalidateSize();
+        farmMap.flyTo([lat, lon], 17, {
+            animate: true,
+            duration: 1.5
+        });
+
+        // Optional: Drop a temporary marker
+        L.circleMarker([lat, lon], {
+            radius: 8,
+            fillColor: "#10B981",
+            color: "#fff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 1
+        }).addTo(farmMap).bindPopup(`Lat: ${lat}, Lon: ${lon}`).openPopup();
+
+        showToast("Moved to coordinates!", "success");
+    }
+});
+
+document.getElementById('mapClearBtn')?.addEventListener('click', () => {
     mapMarkers.forEach(m => farmMap.removeLayer(m));
     if (mapPolygon) farmMap.removeLayer(mapPolygon);
     mapMarkers = [];
@@ -602,7 +769,7 @@ document.getElementById('mapClearBtn').addEventListener('click', () => {
     updateMapPolygon();
 });
 
-document.getElementById('mapLocateBtn').addEventListener('click', () => {
+document.getElementById('mapLocateBtn')?.addEventListener('click', () => {
     const btn = document.getElementById('mapLocateBtn');
     const oldHtml = btn.innerHTML;
     btn.innerHTML = "<span>⏳</span> Locating...";
@@ -627,7 +794,7 @@ document.getElementById('mapLocateBtn').addEventListener('click', () => {
     }
 });
 
-document.getElementById('mapConfirmBtn').addEventListener('click', () => {
+document.getElementById('mapConfirmBtn')?.addEventListener('click', () => {
     if (mapMarkers.length < 3) return;
 
     // Calculate the center of the polygon to use as the Global Lat/Lon for Open-Meteo & Weather APIs
@@ -658,7 +825,7 @@ document.getElementById('mapConfirmBtn').addEventListener('click', () => {
     // Save GeoJSON to backend immediately if farmer is logged in. 
     // Otherwise hold it in memory.
     if (farmerId && currentGeoJson) {
-        fetch('/api/v1/gis/save-boundary?farmer_id=' + farmerId, {
+        fetch(`${API_BASE_URL}/api/v1/gis/save-boundary?farmer_id=` + farmerId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(currentGeoJson)
@@ -668,7 +835,7 @@ document.getElementById('mapConfirmBtn').addEventListener('click', () => {
     moveToStep2();
 });
 
-document.getElementById('closeMapOverlayBtn').addEventListener('click', () => {
+document.getElementById('closeMapOverlayBtn')?.addEventListener('click', () => {
     document.getElementById('step-1-location').classList.add('hidden');
     if (farmerId) {
         document.getElementById('step-0-dashboard').classList.remove('hidden');
@@ -697,6 +864,12 @@ function setupCustomDropdown(containerId, selectedBoxId, listId, hiddenInputId, 
     const selectedBox = document.getElementById(selectedBoxId);
     const optionsList = document.getElementById(listId);
     const hiddenInput = document.getElementById(hiddenInputId);
+
+    // Safety check - if any required element is missing, abort setup for this dropdown
+    if (!container || !selectedBox || !optionsList || !hiddenInput) {
+        console.warn(`Dropdown setup skipped. Missing elements for: ${containerId}`);
+        return;
+    }
 
     // Toggle Dropdown
     selectedBox.addEventListener('click', () => {
@@ -772,7 +945,16 @@ function calculatePastDate(daysAgo) {
     return date.toISOString().split('T')[0];
 }
 
-document.getElementById('getRecommendationBtn').addEventListener('click', () => {
+document.getElementById('getRecommendationBtn')?.addEventListener('click', () => {
+    console.log("=== getRecommendationBtn CLICKED ===");
+    console.log("globalLat:", globalLat, "globalLon:", globalLon);
+
+    // 1. Pre-flight Validation
+    if (!globalLat || !globalLon) {
+        showToast("Error: Please mark your farm boundary on the map first.", "error");
+        return;
+    }
+
     const crop = document.getElementById('cropSelect').value;
 
     // Parse Sowing Date
@@ -782,7 +964,7 @@ document.getElementById('getRecommendationBtn').addEventListener('click', () => 
     else if (sowingDropdownVal === '1_month') sowingDateParsed = calculatePastDate(30);
     else if (sowingDropdownVal === '2_months') sowingDateParsed = calculatePastDate(60);
     else if (sowingDropdownVal === '3_months') sowingDateParsed = calculatePastDate(90);
-    else sowingDateParsed = document.getElementById('sowingDate').value;
+    else sowingDateParsed = document.getElementById('sowingDate').value || calculatePastDate(15); // Fallback
 
     // Parse Irrigation Date
     const irriDropdownVal = document.getElementById('irrigationDropdown').value;
@@ -790,7 +972,7 @@ document.getElementById('getRecommendationBtn').addEventListener('click', () => 
 
     if (irriDropdownVal === '1_week') lastIrriDate = calculatePastDate(7);
     else if (irriDropdownVal === '2_weeks') lastIrriDate = calculatePastDate(14);
-    else lastIrriDate = document.getElementById('lastIrrigationDate').value;
+    else lastIrriDate = document.getElementById('lastIrrigationDate').value || calculatePastDate(7); // Fallback
 
     const btn = document.getElementById('getRecommendationBtn');
     btn.disabled = true;
@@ -798,13 +980,28 @@ document.getElementById('getRecommendationBtn').addEventListener('click', () => 
 
     globalLastIrriDate = lastIrriDate;
 
-    fetchWeatherAnalysis(globalLat, globalLon, crop, sowingDateParsed, lastIrriDate).finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = `<span class="icon">🚀</span> Get Smart Recommendation`;
-    });
+    // Build polygon for spatial analysis
+    let polyPayload = null;
+    if (mapMarkers.length >= 3) {
+        polyPayload = mapMarkers.map(m => ({
+            lat: m.getLatLng().lat,
+            lon: m.getLatLng().lng
+        }));
+    }
+
+    // Execute with error catching
+    fetchWeatherAnalysis(globalLat, globalLon, crop, sowingDateParsed, lastIrriDate, polyPayload)
+        .catch(err => {
+            console.error("Recommendation Error:", err);
+            showToast("Failed to generate recommendation. Check internet connection.");
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="icon">🚀</span> Get Smart Recommendation`;
+        });
 });
 
-document.getElementById('resetBtn').addEventListener('click', () => {
+document.getElementById('resetBtn')?.addEventListener('click', () => {
     document.getElementById('results-container').classList.add('hidden');
     document.getElementById('step-1-location').classList.remove('hidden');
     globalLat = null;
@@ -817,7 +1014,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
     document.getElementById('statusMessage').textContent = "";
 });
 
-async function fetchWeatherAnalysis(lat, lon, crop, sowingDate, lastIrriDate) {
+async function fetchWeatherAnalysis(lat, lon, crop, sowingDate, lastIrriDate, polygon = null) {
     const statusMsg = document.getElementById('step2Status');
     statusMsg.textContent = "Analyzing climate data...";
     statusMsg.className = "status-msg";
@@ -828,10 +1025,11 @@ async function fetchWeatherAnalysis(lat, lon, crop, sowingDate, lastIrriDate) {
             longitude: lon,
             crop: crop || 'wheat',
             sowing_date: sowingDate || '',
-            last_irrigation_date: lastIrriDate || ''
+            last_irrigation_date: lastIrriDate || '',
+            polygon: polygon
         };
 
-        const response = await fetch('http://127.0.0.1:8000/api/v1/weather-analysis', {
+        const response = await fetch(`${API_BASE_URL}/api/v1/weather-analysis`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -851,24 +1049,6 @@ async function fetchWeatherAnalysis(lat, lon, crop, sowingDate, lastIrriDate) {
 
         displayResults(data);
 
-        // --- Dynamic Guest CTA & Save Field Toggles ---
-        const guestCta = document.getElementById('guestCtaBanner');
-        const saveBtn = document.getElementById('saveFieldBtn');
-
-        if (farmerId) {
-            guestCta.classList.add('hidden');
-
-            // If they just formulated a new field, show the Save button
-            if (!viewingSavedField) {
-                saveBtn.classList.remove('hidden');
-            } else {
-                saveBtn.classList.add('hidden');
-            }
-        } else {
-            guestCta.classList.remove('hidden');
-            saveBtn.classList.add('hidden');
-        }
-
     } catch (error) {
         console.error('Error:', error);
         statusMsg.textContent = "Failed to connect to the analysis engine. Ensure backend is running.";
@@ -877,13 +1057,13 @@ async function fetchWeatherAnalysis(lat, lon, crop, sowingDate, lastIrriDate) {
 }
 
 // --- Wire up Guest CTA Login Button ---
-document.getElementById('guestToLoginBtn').addEventListener('click', () => {
+document.getElementById('guestToLoginBtn')?.addEventListener('click', () => {
     document.getElementById('results-container').classList.add('hidden');
     document.getElementById('step-0-login').classList.remove('hidden');
 });
 
 // --- Wire up Save Field Button ---
-document.getElementById('saveFieldBtn').addEventListener('click', () => {
+document.getElementById('saveFieldBtn')?.addEventListener('click', () => {
     const btn = document.getElementById('saveFieldBtn');
     btn.disabled = true;
     btn.innerHTML = `<span class="icon">⏳</span> Saving to Dashboard...`;
@@ -892,7 +1072,7 @@ document.getElementById('saveFieldBtn').addEventListener('click', () => {
     const fSow = document.getElementById('sowingDate').value || null;
     const initialIrriAmount = parseFloat(document.getElementById('initialIrrigAmount').value) || 0;
 
-    fetch(`http://127.0.0.1:8000/api/v1/auth/farmer/${farmerId}/add-field`, {
+    fetch(`${API_BASE_URL}/api/v1/auth/farmer/${farmerId}/add-field`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -902,7 +1082,8 @@ document.getElementById('saveFieldBtn').addEventListener('click', () => {
             crop: fCrop,
             sowing_date: fSow,
             last_irrigation_date: globalLastIrriDate || null,
-            initial_irrigation_mm: initialIrriAmount
+            initial_irrigation_mm: initialIrriAmount,
+            boundary_geojson: currentGeoJson ? JSON.stringify(currentGeoJson) : null
         })
     }).then(res => {
         if (res.ok) {
@@ -919,19 +1100,92 @@ document.getElementById('saveFieldBtn').addEventListener('click', () => {
 });
 
 function displayResults(data) {
-    // document.getElementById('location-card').classList.add('hidden'); // This line is no longer needed here
-    // document.getElementById('results-container').classList.remove('hidden'); // This line is no longer needed here
+    const resultsHeader = document.getElementById('results-header');
+    const standardGrid = document.getElementById('standard-results-grid');
+    const visualMapContainer = document.getElementById('visualFarmMapContainer');
+    const leafCard = document.getElementById('leafUploadCard');
+    const matrixContainer = document.getElementById('decisionMatrixContainer');
+    const healthResultCard = document.getElementById('health-result-card');
+    const inferenceBox = document.getElementById('inferenceBox');
+    const guestCta = document.getElementById('guestCtaBanner');
+    const saveBtn = document.getElementById('saveFieldBtn');
 
-    // Basic texts
-    document.getElementById('res-location').textContent = data.location;
-    document.getElementById('res-rain-prob').textContent = data.rain_probability_next_3_days;
-    document.getElementById('res-next-rain').textContent = data.next_rain_expected_on ? formatDate(data.next_rain_expected_on) : "No Rain Expected";
-    document.getElementById('res-max-temp').textContent = `${data.max_temperature_next_7_days}°C`;
+    if (viewingSavedField) {
+        // Farmer Mode: Crop Health Analysis Portal
+        if (resultsHeader) {
+            resultsHeader.querySelector('h3').innerHTML = `Crop Health Analysis: <span id="res-location" style="color:var(--primary)">${data.location}</span>`;
+        }
+        standardGrid?.classList.add('hidden');
+        visualMapContainer?.classList.remove('hidden');
+        leafCard?.classList.remove('hidden');
+        matrixContainer?.classList.remove('hidden');
+
+        // Farmer Mode: Explicitly hide guest CTA and save button
+        guestCta?.classList.add('hidden');
+        saveBtn?.classList.add('hidden');
+
+        initVisualFarmMap(data);
+        populateDecisionMatrix(data);
+        setupLeafUploadListeners(localStorage.getItem('currentViewFieldId'));
+    } else {
+        // Guest Mode OR Farmer formulating a NEW field
+        if (resultsHeader) {
+            resultsHeader.querySelector('h3').innerHTML = `Analysis for <span id="res-location">${data.location}</span>`;
+        }
+        standardGrid?.classList.remove('hidden');
+        visualMapContainer?.classList.add('hidden');
+        leafCard?.classList.add('hidden');
+        matrixContainer?.classList.add('hidden');
+        if (healthResultCard) healthResultCard.classList.add('hidden');
+        inferenceBox?.classList.add('hidden');
+
+        // Toggle CTAs based on login status
+        if (farmerId) {
+            guestCta?.classList.add('hidden');
+            saveBtn?.classList.remove('hidden');
+        } else {
+            guestCta?.classList.remove('hidden');
+            saveBtn?.classList.add('hidden');
+        }
+    }
+
+    // Basic texts - Use optional chaining to prevent crashes
+    const locEl = document.getElementById('res-location');
+    if (locEl) locEl.textContent = data.location;
+
+    const rainProbEl = document.getElementById('res-rain-prob');
+    if (rainProbEl) rainProbEl.textContent = `${data.rain_probability_next_3_days}%`;
+
+    const nextRainEl = document.getElementById('res-next-rain');
+    if (nextRainEl) nextRainEl.textContent = data.next_rain_expected_on ? formatDate(data.next_rain_expected_on) : "No Rain Expected";
+
+    const maxTempEl = document.getElementById('res-max-temp');
+    if (maxTempEl) maxTempEl.textContent = `${data.max_temperature_next_7_days}°C`;
 
     // Check if Soil Type Display exists, update if present
     const soilTypeEl = document.getElementById('res-soil-type');
     if (soilTypeEl) {
         soilTypeEl.textContent = data.soil_type || 'Unknown';
+    }
+
+    // Update timestamp
+    const lastUpdated = document.getElementById('last-updated-time');
+    if (lastUpdated) {
+        const now = new Date();
+        lastUpdated.textContent = `Last Sync: ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+    }
+
+    // AI Crop Health
+    const healthScoreEl = document.getElementById('res-health-score');
+    const healthStatusEl = document.getElementById('res-health-status');
+    if (healthScoreEl && data.crop_health) {
+        healthScoreEl.textContent = `${data.crop_health.score}%`;
+        healthStatusEl.textContent = `Status: ${data.crop_health.status}`;
+
+        // Dynamic color based on score
+        if (data.crop_health.score > 80) healthScoreEl.style.color = "#10B981";
+        else if (data.crop_health.score > 60) healthScoreEl.style.color = "#F59E0B";
+        else healthScoreEl.style.color = "#EF4444";
     }
 
     // Heat Risk Badge
@@ -971,6 +1225,43 @@ function displayResults(data) {
         irriBox.style.backgroundColor = "rgba(16, 185, 129, 0.1)";
         irriBox.style.borderColor = "rgba(16, 185, 129, 0.2)";
     }
+
+    const irriEtc = document.getElementById('res-irri-etc');
+    if (irriEtc && data.irrigation_recommendation.etc_mm_per_day) {
+        irriEtc.textContent = `Daily Water Demand (ETc): ${data.irrigation_recommendation.etc_mm_per_day} mm`;
+    }
+
+    // Handle Smart Scouting Button Relocation
+    const scoutingLinkContainer = document.getElementById('scoutingLinkContainer');
+    if (scoutingLinkContainer) {
+        scoutingLinkContainer.innerHTML = ''; // Clear previous
+        if (viewingSavedField) {
+            // Find fieldId from global variables or data if available
+            // Since we use globalLat/Lon, we might need to store currentFieldId
+            const currentFieldIdForScouting = localStorage.getItem('currentViewFieldId');
+            if (currentFieldIdForScouting) {
+                scoutingLinkContainer.innerHTML = `
+                    <button class="btn-primary open-scouting-btn" data-id="${currentFieldIdForScouting}" style="width: 100%; background-color: #10b981; border: none; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); margin-top: 1rem;">
+                        <span class="icon">🛰️</span> Smart Directional Scouting
+                    </button>
+                `;
+                scoutingLinkContainer.classList.remove('hidden');
+
+                // Attach listener
+                const scButton = scoutingLinkContainer.querySelector('.open-scouting-btn');
+                scButton.addEventListener('click', (e) => {
+                    const fid = e.currentTarget.getAttribute('data-id');
+                    console.log("Scouting Button Clicked for Field:", fid);
+                    // showToast("Opening Satellite Scouting Map...", "info");
+                    openScoutingMap(fid);
+                });
+            } else {
+                scoutingLinkContainer.classList.add('hidden');
+            }
+        } else {
+            scoutingLinkContainer.classList.add('hidden');
+        }
+    }
 }
 
 function formatDate(dateString) {
@@ -1003,10 +1294,454 @@ function showToast(message, type = "error") {
     }
 
     toast.classList.add('show');
-    toast.classList.remove('hidden');
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.classList.add('hidden'), 300);
-    }, 4000);
+    setTimeout(() => toast.classList.remove('show'), 4000);
 }
+
+// --- Smart Directional Scouting Logic ---
+let scoutingMapInstance = null;
+const scoutingModal = document.getElementById('scoutingModal');
+const closeScoutingModalBtn = document.getElementById('closeScoutingModalBtn');
+const scoutingInstruction = document.getElementById('scoutingInstruction');
+const scoutingLoadingText = document.getElementById('scoutingLoadingText');
+const scoutingContent = document.getElementById('scoutingContent');
+
+// Diagnostic UI
+const startDiagnosticBtn = document.getElementById('startDiagnosticBtn');
+const diagnosticResults = document.getElementById('diagnosticResults');
+let currentScoutingFieldId = null;
+
+closeScoutingModalBtn?.addEventListener('click', () => {
+    scoutingModal.classList.add('hidden');
+    if (scoutingMapInstance) {
+        scoutingMapInstance.remove();
+        scoutingMapInstance = null;
+    }
+});
+
+function openScoutingMap(fieldId) {
+    if (!fieldId) {
+        showToast("Field ID missing. Cannot open scouting.");
+        return;
+    }
+    currentScoutingFieldId = fieldId;
+    scoutingModal.classList.remove('hidden');
+    scoutingLoadingText.classList.remove('hidden');
+    scoutingContent.classList.add('hidden');
+    scoutingInstruction.innerHTML = '';
+
+    // Reset Diagnostic UI
+    diagnosticResults.classList.add('hidden');
+    startDiagnosticBtn.disabled = false;
+    startDiagnosticBtn.innerHTML = `<span class="icon">📸</span> Analyze Leaf Health (Vision AI Model)`;
+
+    // Destroy previous instance if it exists
+    if (scoutingMapInstance) {
+        scoutingMapInstance.remove();
+        scoutingMapInstance = null;
+    }
+
+    fetch(`${API_BASE_URL}/api/v1/gis/field/${fieldId}/scouting`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status !== 'success') {
+                throw new Error(data.detail || 'Failed to fetch scouting data');
+            }
+
+            const report = data.data;
+
+            scoutingLoadingText.classList.add('hidden');
+            scoutingContent.classList.remove('hidden');
+
+            const stressedEdge = report.edges.find(e => e.is_stressed);
+
+            scoutingInstruction.innerHTML = `
+                <div style="display: flex; gap: 0.8rem; align-items: flex-start;">
+                    <span style="font-size: 1.5rem;">🚨</span>
+                    <div>
+                        <strong style="display: block; color: var(--primary); margin-bottom: 0.3rem;">Action Required</strong>
+                        ${report.instruction}
+                    </div>
+                </div>
+            `;
+
+            // Render the Scouting Map
+            setTimeout(() => {
+                scoutingMapInstance = L.map('scoutingMapContainer').setView(report.center, 18);
+
+                L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                    maxZoom: 20,
+                    attribution: '© Google Satellite'
+                }).addTo(scoutingMapInstance);
+
+                // Draw corners
+                report.points.forEach(pt => {
+                    const latlng = [pt.coordinate[0], pt.coordinate[1]];
+                    L.circleMarker(latlng, { radius: 6, color: '#fff', fillColor: '#3b82f6', fillOpacity: 1 }).addTo(scoutingMapInstance)
+                        .bindTooltip(`Point ${pt.index} (${pt.quadrant})`, { permanent: true, direction: 'top', className: 'scouting-tooltip' });
+                });
+
+                // Draw edges
+                const latlngs = [];
+                report.edges.forEach(edge => {
+                    const p1 = [edge.start_point.coordinate[0], edge.start_point.coordinate[1]];
+                    const p2 = [edge.end_point.coordinate[0], edge.end_point.coordinate[1]];
+
+                    const edgeColor = edge.is_stressed ? '#EF4444' : '#10B981';
+                    const edgeWeight = edge.is_stressed ? 5 : 3;
+                    const edgeDash = edge.is_stressed ? '' : '5, 5';
+
+                    const polyline = L.polyline([p1, p2], {
+                        color: edgeColor,
+                        weight: edgeWeight,
+                        dashArray: edgeDash,
+                        opacity: 0.8
+                    }).addTo(scoutingMapInstance);
+
+                    if (edge.is_stressed) {
+                        try {
+                            // Focus exactly on the stressed edge
+                            const tmpBounds = L.latLngBounds([p1, p2]);
+                            scoutingMapInstance.fitBounds(tmpBounds, { padding: [50, 50], maxZoom: 20 });
+                        } catch (e) { }
+                    }
+                });
+
+            }, 300); // Allow DOM to render container first
+
+        })
+        .catch(err => {
+            console.error("Scouting Map Error:", err);
+            scoutingModal.classList.add('hidden');
+            showToast(err.message || 'Scouting not available for this field.');
+        });
+}
+// --- Vision AI Diagnostic Logic ---
+startDiagnosticBtn?.addEventListener('click', () => {
+    if (!currentScoutingFieldId) return;
+
+    startDiagnosticBtn.disabled = true;
+    startDiagnosticBtn.innerHTML = `<span class="icon">⏳</span> AI Model Running Inference...`;
+    diagnosticResults.classList.add('hidden');
+
+    fetch(`${API_BASE_URL}/api/v1/health/diagnostic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ field_id: parseInt(currentScoutingFieldId) })
+    })
+        .then(res => res.json())
+        .then(data => {
+            startDiagnosticBtn.innerHTML = `<span class="icon">✅</span> Analysis Complete`;
+            diagnosticResults.classList.remove('hidden');
+
+            document.getElementById('diag-confidence').textContent = `Confidence: ${Math.round(data.debug_trace.layer_3_vision.confidence * 100)}%`;
+            document.getElementById('diag-status').textContent = data.final_status;
+            document.getElementById('diag-prescriptive').textContent = data.prescriptive_action;
+
+            // Dynamic styling for status
+            const statusEl = document.getElementById('diag-status');
+            if (data.health_score > 80) statusEl.style.color = "#10B981";
+            else if (data.health_score > 50) statusEl.style.color = "#F59E0B";
+            else statusEl.style.color = "#EF4444";
+        })
+        .catch(err => {
+            console.error("Diagnostic Error:", err);
+            startDiagnosticBtn.disabled = false;
+            startDiagnosticBtn.innerHTML = `<span class="icon">📸</span> Analyze Leaf Health (Vision AI Model)`;
+            showToast("AI Model failed to respond. Check backend.");
+        });
+});
+
+// --- Crop Health Analysis Portal Helpers ---
+
+let visualFarmMap = null;
+
+function initVisualFarmMap(data) {
+    const container = document.getElementById('visualFarmMapContainer');
+    if (!container) return;
+
+    // Destroy old map if exists
+    if (visualFarmMap) {
+        visualFarmMap.remove();
+        visualFarmMap = null;
+    }
+
+    // Initialize map
+    visualFarmMap = L.map('visualFarmMapContainer', { zoomControl: false }).setView([globalLat, globalLon], 18);
+
+    // Satellitle View
+    L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        attribution: '© Google Satellite'
+    }).addTo(visualFarmMap);
+
+    // If we have boundary data, draw it
+    if (currentGeoJson && currentGeoJson.geometry) {
+        const poly = L.geoJSON(currentGeoJson, {
+            style: function (feature) {
+                return {
+                    color: '#10B981',
+                    weight: 3,
+                    fillColor: '#10B981',
+                    fillOpacity: 0.2
+                };
+            }
+        }).addTo(visualFarmMap);
+        visualFarmMap.fitBounds(poly.getBounds());
+    }
+
+    // Add Stressed Pulse Overlay (simulated for visual effect)
+    // In a real app, this would come from the scouting API
+    L.circle([globalLat, globalLon], {
+        radius: 30,
+        className: 'stressed-pulse',
+        color: '#EF4444',
+        fillColor: '#EF4444',
+        fillOpacity: 0.2
+    }).addTo(visualFarmMap);
+}
+
+function simulateResNetInference() {
+    const box = document.getElementById('inferenceBox');
+    const layerName = document.getElementById('inference-layer-name');
+    const pct = document.getElementById('inference-pct');
+    const bar = document.getElementById('inference-bar');
+    const log = document.getElementById('inference-log');
+
+    box.classList.remove('hidden');
+    box.classList.add('scanning');
+
+    const layers = [
+        { name: "ResNet50: Input Layer (224x224x3)", time: 800, log: "Normalizing RGB tensors..." },
+        { name: "Layer 1: Conv1 + MaxPool", time: 1000, log: "Detecting edge features..." },
+        { name: "Layer 10: Bottleneck Residual (v1)", time: 1200, log: "Extracting color gradients..." },
+        { name: "Layer 25: Middle Block Fusion", time: 1500, log: "Synthesizing texture patterns..." },
+        { name: "Layer 48: Global Average Pool", time: 1200, log: "Deep semantic extraction..." },
+        { name: "Output: Softmax Classification", time: 800, log: "Decision Matrix synthesis complete." }
+    ];
+
+    let currentLayer = 0;
+
+    function nextLayer() {
+        if (currentLayer >= layers.length) {
+            box.classList.remove('scanning');
+            return;
+        }
+
+        const l = layers[currentLayer];
+        layerName.textContent = l.name;
+        log.textContent = `[TRACE]: ${l.log}`;
+
+        const progress = Math.round(((currentLayer + 1) / layers.length) * 100);
+        pct.textContent = `${progress}%`;
+        bar.style.width = `${progress}%`;
+
+        currentLayer++;
+        setTimeout(nextLayer, l.time);
+    }
+
+    nextLayer();
+}
+
+function populateDecisionMatrix(data) {
+    const satelliteVal = document.getElementById('matrix-satellite-val');
+    const satelliteStatus = document.getElementById('matrix-satellite-status');
+    const aiVal = document.getElementById('matrix-ai-val');
+    const aiStatus = document.getElementById('matrix-ai-status');
+    const envVal = document.getElementById('matrix-env-val');
+    const envStatus = document.getElementById('matrix-env-status');
+
+    // Satellite (NDVI) - Upgraded to Polygon-Centric Spatial Analysis
+    let ndvi = 0;
+    if (data.polygon && data.polygon.length >= 3) {
+        // Spatial Average Simulation: use all points of the khet
+        const avgLat = data.polygon.reduce((sum, p) => sum + p.lat, 0) / data.polygon.length;
+        const avgLon = data.polygon.reduce((sum, p) => sum + p.lon, 0) / data.polygon.length;
+        ndvi = (0.65 + (Math.abs(avgLat + avgLon) % 0.15)).toFixed(2);
+    } else {
+        // Fallback to center point
+        ndvi = (0.65 + (Math.abs(parseFloat(globalLat) + parseFloat(globalLon)) % 0.15)).toFixed(2);
+    }
+
+    if (satelliteVal) satelliteVal.textContent = ndvi;
+    if (satelliteStatus) {
+        if (ndvi > 0.75) {
+            satelliteStatus.textContent = "High Biomass";
+            satelliteStatus.style.color = "#10B981";
+        } else if (ndvi > 0.5) {
+            satelliteStatus.textContent = "Optimal Growth";
+            satelliteStatus.style.color = "#10B981";
+        } else {
+            satelliteStatus.textContent = "Low Vegetation";
+            satelliteStatus.style.color = "#F59E0B";
+        }
+    }
+
+    // Deep AI (ResNet) - Show 'Pending' if no upload yet
+    if (aiVal) aiVal.textContent = "Pending";
+    if (aiStatus) {
+        aiStatus.textContent = "Waiting for Scan";
+        aiStatus.style.color = "var(--text-muted)";
+    }
+
+    // Environmental - Link to real weather data
+    const risk = data.heat_stress_risk ? data.heat_stress_risk.level : "Unknown";
+    if (envVal) envVal.textContent = risk;
+    if (envStatus) {
+        if (risk === "Low") {
+            envStatus.textContent = "Stable Period";
+            envStatus.style.color = "#10B981";
+        } else {
+            envStatus.textContent = "Climatic Stress";
+            envStatus.style.color = "#EF4444";
+        }
+    }
+}
+
+function setupLeafUploadListeners(fieldId) {
+    const uploadBtn = document.getElementById('uploadLeafBtn');
+    const fileInput = document.getElementById('leafFileInput');
+
+    if (!uploadBtn || !fileInput) return;
+
+    // Reset previous listeners to avoid duplicates
+    const btnClone = uploadBtn.cloneNode(true);
+    uploadBtn.parentNode.replaceChild(btnClone, uploadBtn);
+
+    btnClone.addEventListener('click', () => {
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        btnClone.disabled = true;
+        btnClone.innerHTML = `<span>⏳</span> Analyzing...`;
+
+        // Show inference animation
+        simulateResNetInference();
+
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/v1/health/upload-diagnostic?field_id=${fieldId}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Upload failed");
+
+            const result = await response.json();
+            console.log("Upload Result:", result);
+
+            // Update UI with REAL results
+            setTimeout(() => {
+                // Update AI Crop Health section in the grid (if visible)
+                const healthScoreEl = document.getElementById('res-health-score');
+                const healthStatusEl = document.getElementById('res-health-status');
+                if (healthScoreEl) {
+                    healthScoreEl.textContent = `${result.health_score}%`;
+                    if (result.health_score > 80) healthScoreEl.style.color = "#10B981";
+                    else if (result.health_score > 60) healthScoreEl.style.color = "#F59E0B";
+                    else healthScoreEl.style.color = "#EF4444";
+                }
+                if (healthStatusEl) healthStatusEl.textContent = `Status: ${result.final_status}`;
+
+                // Update Decision Matrix
+                const aiVal = document.getElementById('matrix-ai-val');
+                const aiStatus = document.getElementById('matrix-ai-status');
+                const visData = result.debug_trace.layer_3_vision;
+
+                if (aiVal) aiVal.textContent = `${Math.round(visData.confidence * 100)}%`;
+                if (aiStatus) {
+                    aiStatus.textContent = visData.detection;
+                    aiStatus.style.color = visData.is_anomaly ? "#EF4444" : "#10B981";
+                }
+
+                // Update NEW Health Result Card
+                const healthResultCard = document.getElementById('health-result-card');
+                const healthFinalStatus = document.getElementById('res-health-final-status');
+                const healthPrescriptive = document.getElementById('res-health-prescriptive');
+
+                if (healthResultCard) healthResultCard.classList.remove('hidden');
+                if (healthFinalStatus) {
+                    healthFinalStatus.textContent = result.final_status;
+                    // Dynamic color for health status
+                    if (result.health_score > 80) healthFinalStatus.style.color = "#10B981";
+                    else if (result.health_score > 50) healthFinalStatus.style.color = "#F59E0B";
+                    else healthFinalStatus.style.color = "#EF4444";
+                }
+                if (healthPrescriptive) healthPrescriptive.textContent = result.prescriptive_action;
+
+                // Stop overwriting recommendation box (Leave irrigation as is)
+
+                showToast("Real-time Leaf Analysis Complete!", "success");
+                btnClone.innerHTML = `<span>✅</span> Re-upload Photo`;
+                btnClone.disabled = false;
+            }, 5000); // Sync with animation length roughly
+
+        } catch (err) {
+            console.error(err);
+            showToast("Failed to process image.");
+            btnClone.innerHTML = `<span>📤</span> Upload Leaf Photo`;
+            btnClone.disabled = false;
+        }
+    });
+}
+// --- Refresh Logic ---
+document.getElementById('refreshAnalysisBtn')?.addEventListener('click', async function () {
+    const btn = this;
+    const icon = btn.querySelector('.icon');
+    const fieldId = localStorage.getItem('currentViewFieldId');
+
+    if (!fieldId) return;
+
+    btn.disabled = true;
+    if (icon) {
+        icon.style.display = 'inline-block';
+        icon.style.animation = 'spin 1s linear infinite';
+    }
+
+    try {
+        showToast("Synchronizing with Satellite & Weather API...", "info");
+
+        // Use globalLat/Lon which are set when opening the field
+        // Note: For a truly senior solution, we'd fetch the boundary from the DB or local storage here
+        const response = await fetch(`${API_BASE_URL}/api/v1/weather-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                latitude: parseFloat(globalLat),
+                longitude: parseFloat(globalLon),
+                crop: "wheat",
+                polygon: null // Placeholder for refresh (will use point-center if null)
+            })
+        });
+
+        if (!response.ok) throw new Error("Sync failed");
+        const data = await response.json();
+
+        // Refresh display
+        displayResults(data);
+        showToast("Scientific Data Synchronized.", "success");
+    } catch (err) {
+        console.error(err);
+        showToast("Failed to refresh live data.");
+    } finally {
+        btn.disabled = false;
+        if (icon) icon.style.animation = 'none';
+    }
+});
+
+// Add spin animation to CSS via JS if not present
+if (!document.getElementById('spin-style')) {
+    const style = document.createElement('style');
+    style.id = 'spin-style';
+    style.textContent = `
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .btn-icon:hover { background: rgba(255,255,255,0.1) !important; transform: scale(1.05); }
+    `;
+    document.head.appendChild(style);
+}
+

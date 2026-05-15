@@ -23,7 +23,7 @@ class FarmBoundaryPayload(BaseModel):
     geometry: PolygonGeometry
     properties: GeoJSONProperties
 
-@router.post("/gis/save-boundary")
+@router.post("/gis/save-boundary/{farmer_id}")
 def save_farm_boundary(farmer_id: int, payload: FarmBoundaryPayload):
     """
     Receives the GeoJSON Polygon boundary from the Leaflet.js frontend.
@@ -60,3 +60,23 @@ def save_farm_boundary(farmer_id: int, payload: FarmBoundaryPayload):
     except Exception as e:
         logger.error(f"GeoJSON Parsing Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from app.infrastructure.database import get_db
+from app.services.scouting_service import get_directional_scouting_report
+
+@router.get("/gis/field/{field_id}/scouting")
+def get_field_scouting_data(field_id: int, db: Session = Depends(get_db)):
+    """
+    Returns Smart Directional Scouting data for a field, evaluating 4 corners 
+    and identifying the edge with the lowest NDVI stress value.
+    """
+    try:
+        scouting_report = get_directional_scouting_report(field_id, db)
+        return {"status": "success", "data": scouting_report}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Scouting Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate scouting report.")

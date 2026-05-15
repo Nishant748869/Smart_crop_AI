@@ -71,5 +71,12 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(run_midnight_soil_update, 'cron', hour=0, minute=0)
 
 def start_scheduler():
-    scheduler.start()
-    logger.info("Midnight Soil Engine Scheduler Started.")
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Midnight Soil Engine Scheduler Started.")
+
+
+def stop_scheduler():
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+        logger.info("Midnight Soil Engine Scheduler Stopped.")

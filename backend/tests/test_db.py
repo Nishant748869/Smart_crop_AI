@@ -1,5 +1,5 @@
-from app.infrastructure.database import SessionLocal
-from app.models.db_models import DailySoilStatus, FarmField, Farmer
+from backend.app.infrastructure.database import SessionLocal
+from backend.app.models.db_models import DailySoilStatus, FarmField, Farmer
 
 db = SessionLocal()
 irrigations = db.query(DailySoilStatus).filter(DailySoilStatus.irrigation_mm > 0).all()
